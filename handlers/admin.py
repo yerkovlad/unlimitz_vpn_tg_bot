@@ -22,7 +22,8 @@ from vless.api import delete_vless_client
 
 router = Router()
 
-USERS_PER_PAGE = 5
+USERS_PER_PAGE = 4
+SERVERS_PER_PAGE = 5
 
 
 class AdminState(StatesGroup):
@@ -465,13 +466,41 @@ def server_info_inline(server_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.add(
         InlineKeyboardButton(text="🔄 Toggle Active", callback_data=f"toggle_server:{server_id}"),
+        InlineKeyboardButton(text="🗑 Delete", callback_data=f"delete_server:{server_id}"),
         InlineKeyboardButton(text="< Back", callback_data="servers_stats:0")
     )
-    builder.adjust(2)
+    builder.adjust(2, 1)
     return builder.as_markup()
 
+@router.callback_query(IsAdmin(), F.data.startswith("delete_server:"))
+async def delete_server_callback(call: CallbackQuery):
+    server_id = int(call.data.split(":")[1])
 
-SERVERS_PER_PAGE = 5
+    async with SessionFactory() as session:
+        from db.models import Server
+        server = await session.get(Server, server_id)
+        if not server:
+            await call.answer("Server not found", show_alert=True)
+            return
+        name = server.name
+        await session.delete(server)
+        await session.commit()
+
+    await call.answer(f"✅ Server {name} deleted", show_alert=True)
+    await call.message.delete()
+    await call.message.answer(
+        "🖥 <b>Servers:</b>",
+        reply_markup=await _get_servers_markup(0)
+    )
+
+
+async def _get_servers_markup(page: int):
+    async with SessionFactory() as session:
+        servers = await get_all_servers(session)
+    total = len(servers)
+    total_pages = max(1, -(-total // SERVERS_PER_PAGE))
+    page_servers = servers[page * SERVERS_PER_PAGE:(page + 1) * SERVERS_PER_PAGE]
+    return servers_stats_inline(page_servers, page, total_pages)
 
 
 @router.callback_query(IsAdmin(), F.data.startswith("servers_stats:"))
