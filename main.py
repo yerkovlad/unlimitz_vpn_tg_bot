@@ -10,6 +10,7 @@ from db import init_db
 from config import BOT_TOKEN
 from handlers import router
 from middlewares.throttling import ThrottlingMiddleware
+from payments.crypto import close as crypto_close
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +33,12 @@ async def main():
     logging.info("Бот запущен ✅")
 
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await crypto_close()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
