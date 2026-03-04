@@ -64,9 +64,10 @@ def admin_panel_inline() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="💰 Manage Plans", callback_data="manage_plans"),
         InlineKeyboardButton(text="🌍 Manage Locations", callback_data="manage_locations"),
         InlineKeyboardButton(text="🖥 Servers", callback_data="servers_stats:0"),
+        InlineKeyboardButton(text="📊 Statistics", callback_data="admin_stats"),
         InlineKeyboardButton(text="🏠 Home", callback_data="back_home")
     )
-    builder.adjust(2, 2, 1, 1)
+    builder.adjust(2, 1, 1, 2, 1)
     return builder.as_markup()
 
 def user_manage_inline(user_id: int) -> InlineKeyboardMarkup:
@@ -77,8 +78,9 @@ def user_manage_inline(user_id: int) -> InlineKeyboardMarkup:
     builder.add(
         InlineKeyboardButton(text="➕ Add Balance", callback_data=f"add_balance:{user_id}"),
         InlineKeyboardButton(text="➖ Remove Balance", callback_data=f"remove_balance:{user_id}"),
+        InlineKeyboardButton(text="💰 Edit Ref Balance", callback_data=f"edit_ref_balance:{user_id}"),
         InlineKeyboardButton(text="📋 Subscriptions", callback_data=f"admin_user_subs:{user_id}"),
         InlineKeyboardButton(text="◀️ Back", callback_data="users_list:0")
     )
-    builder.adjust(2, 1, 1)
+    builder.adjust(2, 1, 1, 1)
     return builder.as_markup()

@@ -36,6 +36,9 @@ class AdminState(StatesGroup):
     add_server_port = State()
     add_server_location = State()
     add_server_inbound = State()
+    change_ref_balance = State()
+    add_location_code = State()
+    add_location_name = State()
 
 
 async def get_users_page(page: int):
@@ -127,7 +130,8 @@ async def user_info_callback(call: CallbackQuery):
         f"👤 <b>User Info</b>\n\n"
         f"🆔 ID: <code>{user.id}</code>\n"
         f"👤 Username: {username}\n"
-        f"💲 Balance: <code>{user.balance}$</code>",
+        f"💲 Balance: <code>{user.balance:.2f}$</code>\n"
+        f"💰 Ref Balance: <code>{user.ref_balance:.2f}$</code>",
         reply_markup=user_manage_inline(user.id)
     )
     await call.answer()
@@ -329,17 +333,15 @@ def locations_manage_inline(locations) -> InlineKeyboardMarkup:
     for loc in locations:
         status = "✅" if loc.is_active else "❌"
         builder.add(
-            InlineKeyboardButton(
-                text=f"{status} {loc.name}",
-                callback_data=f"toggle_location:{loc.code}"
-            ),
-            InlineKeyboardButton(
-                text="💲",
-                callback_data=f"location_prices:{loc.code}"
-            )
+            InlineKeyboardButton(text=f"{status} {loc.name}", callback_data=f"toggle_location:{loc.code}"),
+            InlineKeyboardButton(text="💲", callback_data=f"location_prices:{loc.code}"),
+            InlineKeyboardButton(text="🗑", callback_data=f"delete_location:{loc.code}")
         )
-    builder.adjust(2)
-    builder.row(InlineKeyboardButton(text="< Back", callback_data="admin_panel"))
+    builder.adjust(3)
+    builder.row(
+        InlineKeyboardButton(text="➕ Add Location", callback_data="add_location"),
+        InlineKeyboardButton(text="< Back", callback_data="admin_panel")
+    )
     return builder.as_markup()
 
 
@@ -739,3 +741,93 @@ async def admin_delete_sub_callback(call: CallbackQuery):
         f"📋 <b>Subscriptions of {user.username or user.id}:</b>",
         reply_markup=user_subs_inline(subs, int(user_id))
     )
+
+@router.callback_query(IsAdmin(), F.data.startswith("edit_ref_balance:"))
+async def edit_ref_balance_callback(call: CallbackQuery, state: FSMContext):
+    user_id = int(call.data.split(":")[1])
+    await state.update_data(user_id=user_id)
+    await call.message.answer("💰 Enter new referral balance amount (e.g. 10.5):")
+    await state.set_state(AdminState.change_ref_balance)
+    await call.answer()
+
+
+@router.message(IsAdmin(), AdminState.change_ref_balance)
+async def process_change_ref_balance(message: Message, state: FSMContext):
+    if not message.text.replace(".", "").isdigit():
+        await message.answer("❌ Invalid amount. Enter a number:")
+        return
+
+    amount = float(message.text)
+    data = await state.get_data()
+    user_id = data["user_id"]
+    await state.clear()
+
+    async with SessionFactory() as session:
+        user = await session.get(User, user_id)
+        if not user:
+            await message.answer("❌ User not found.")
+            return
+        user.ref_balance = amount
+        await session.commit()
+        username = f"@{user.username}" if user.username else f"id:{user.id}"
+
+    await message.answer(
+        f"✅ Referral balance updated!\n"
+        f"👤 {username}\n"
+        f"💰 New ref balance: <code>{amount}$</code>",
+        reply_markup=user_manage_inline(user_id)
+    )
+
+@router.callback_query(IsAdmin(), F.data == "add_location")
+async def add_location_start(call: CallbackQuery, state: FSMContext):
+    await call.message.answer("Enter location code (e.g. de, nl, us):")
+    await state.set_state(AdminState.add_location_code)
+    await call.answer()
+
+
+@router.message(IsAdmin(), AdminState.add_location_code)
+async def add_location_code(message: Message, state: FSMContext):
+    await state.update_data(code=message.text.lower().strip())
+    await message.answer("Enter location name with flag (e.g. 🇩🇪 Germany):")
+    await state.set_state(AdminState.add_location_name)
+
+
+@router.message(IsAdmin(), AdminState.add_location_name)
+async def add_location_name(message: Message, state: FSMContext):
+    data = await state.get_data()
+    code = data["code"]
+    name = message.text.strip()
+    await state.clear()
+
+    async with SessionFactory() as session:
+        existing = await session.get(Location, code)
+        if existing:
+            await message.answer("❌ Location with this code already exists.")
+            return
+        session.add(Location(code=code, name=name, is_active=True))
+        await session.commit()
+
+    await message.answer(f"✅ Location {name} added!")
+
+    async with SessionFactory() as session:
+        locations = await get_all_locations(session)
+    await message.answer("🌍 <b>Manage Locations:</b>", reply_markup=locations_manage_inline(locations))
+
+
+@router.callback_query(IsAdmin(), F.data.startswith("delete_location:"))
+async def delete_location_callback(call: CallbackQuery):
+    code = call.data.split(":")[1]
+
+    async with SessionFactory() as session:
+        loc = await session.get(Location, code)
+        if not loc:
+            await call.answer("Location not found", show_alert=True)
+            return
+        name = loc.name
+        await session.delete(loc)
+        await session.commit()
+        locations = await get_all_locations(session)
+
+    await call.answer(f"✅ {name} deleted", show_alert=True)
+    await call.message.delete()
+    await call.message.answer("🌍 <b>Manage Locations:</b>", reply_markup=locations_manage_inline(locations))

@@ -25,6 +25,8 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, nullable=True, default=None)
     balance = Column(Float, default=0)
+    ref_balance = Column(Float, default=0)
+    ref_percent = Column(Float, nullable=True)
 
     subscriptions = relationship("Subscription", back_populates="user")
 
@@ -92,3 +94,32 @@ class Server(Base):
 
     def __repr__(self):
         return f"<Server {self.name} ({self.location_code}) {self.current_users}/{self.max_users}>"
+
+class ReferralSettings(Base):
+    __tablename__ = "referral_settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    default_percent = Column(Float, default=30.0)
+
+
+class Referral(Base):
+    __tablename__ = "referrals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    referrer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    referred_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    referrer = relationship("User", foreign_keys=[referrer_id])
+    referred = relationship("User", foreign_keys=[referred_id])
+
+
+class ReferralEarning(Base):
+    __tablename__ = "referral_earnings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    referrer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    referred_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    amount = Column(Float, nullable=False)
+    percent = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

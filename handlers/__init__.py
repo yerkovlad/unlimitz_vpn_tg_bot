@@ -11,6 +11,7 @@ from .earn import router as earn_router
 from .buy import router as buy_router
 from .subs import router as subs_router
 from .payment import router as payment_router
+from .stats import router as stats_router
 
 router = Router()
 router.include_router(start_router)
@@ -24,3 +25,4 @@ router.include_router(earn_router)
 router.include_router(buy_router)
 router.include_router(subs_router)
 router.include_router(payment_router)
+router.include_router(stats_router)

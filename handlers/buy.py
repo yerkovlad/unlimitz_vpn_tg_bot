@@ -4,12 +4,14 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from datetime import datetime, timedelta
 import time
+from sqlalchemy import select as sa_select
 
 from db.database import SessionFactory
-from db.crud import get_all_locations, get_available_server, get_price, get_or_create_user, get_active_plans
-from db.models import Subscription, Plan, Location
+from db.crud import get_all_locations, get_available_server, get_price, get_or_create_user, get_active_plans, add_referral_earning
+from db.models import Subscription, Plan, Location, Referral
 from vless.api import generate_vless_link
 from keyboards.inline import back_home_inline
+
 
 router = Router()
 
@@ -190,6 +192,23 @@ async def confirm_purchase_callback(call: CallbackQuery):
         session.add(sub)
         server.current_users += 1
         await session.commit()
+
+        ref_result = await session.execute(
+            sa_select(Referral).where(Referral.referred_id == call.from_user.id)
+        )
+        ref = ref_result.scalar_one_or_none()
+        if ref:
+            earning = await add_referral_earning(session, ref.referrer_id, call.from_user.id, price)
+            # Уведомить реферера
+            try:
+                await call.bot.send_message(
+                    ref.referrer_id,
+                    f"💰 <b>Referral bonus!</b>\n"
+                    f"Your friend made a purchase.\n"
+                    f"You earned: <code>{earning:.2f}$</code>"
+                )
+            except Exception:
+                pass
 
     await call.message.delete()
     await call.message.answer(
