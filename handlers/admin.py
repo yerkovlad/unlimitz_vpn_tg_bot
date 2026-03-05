@@ -40,6 +40,7 @@ class AdminState(StatesGroup):
     add_location_code = State()
     add_location_name = State()
     add_server_uri = State()
+    edit_max_users = State()
 
 
 async def get_users_page(page: int):
@@ -462,17 +463,19 @@ def servers_stats_inline(servers, page: int, total_pages: int) -> InlineKeyboard
     return builder.as_markup()
 
 
-def server_info_inline(server_id: int) -> InlineKeyboardMarkup:
+def server_info_inline(server_id: int, is_online: bool) -> InlineKeyboardMarkup:
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     from aiogram.types import InlineKeyboardButton
 
     builder = InlineKeyboardBuilder()
+    toggle_text = "🔴 Disable" if is_online else "🟢 Enable"
     builder.add(
-        InlineKeyboardButton(text="🔄 Toggle Active", callback_data=f"toggle_server:{server_id}"),
+        InlineKeyboardButton(text=toggle_text, callback_data=f"toggle_server:{server_id}"),
+        InlineKeyboardButton(text="👥 Max Users", callback_data=f"edit_max_users:{server_id}"),
         InlineKeyboardButton(text="🗑 Delete", callback_data=f"delete_server:{server_id}"),
         InlineKeyboardButton(text="< Back", callback_data="servers_stats:0")
     )
-    builder.adjust(2, 1)
+    builder.adjust(2, 1, 1)
     return builder.as_markup()
 
 @router.callback_query(IsAdmin(), F.data.startswith("delete_server:"))
@@ -535,6 +538,8 @@ async def server_info_callback(call: CallbackQuery):
 
     alive = await check_server_alive(server)
     status = "🟢 Online" if alive else "🔴 Offline"
+    active = "✅ Active" if server.is_active else "❌ Inactive"
+    panel_url = f"https://{server.ip}:{server.port}"
 
     await call.message.delete()
     await call.message.answer(
@@ -542,9 +547,10 @@ async def server_info_callback(call: CallbackQuery):
         f"🌍 Location: {server.location_code.upper()}\n"
         f"🔌 IP: <code>{server.ip}:{server.port}</code>\n"
         f"👥 Users: {server.current_users}/{server.max_users}\n"
-        f"Status: {status}\n"
-        f"Active: {'✅' if server.is_active else '❌'}",
-        reply_markup=server_info_inline(server_id)
+        f"📡 Status: {status}\n"
+        f"🔘 Active: {active}\n"
+        f"🔗 Panel: {panel_url}",
+        reply_markup=server_info_inline(server_id, alive)
     )
     await call.answer()
 
@@ -598,28 +604,6 @@ async def add_server_location(message: Message, state: FSMContext):
     await message.answer("Enter inbound ID (default 1):")
     await state.set_state(AdminState.add_server_inbound)
 
-
-# @router.message(IsAdmin(), AdminState.add_server_inbound)
-# async def add_server_inbound(message: Message, state: FSMContext):
-#     inbound_id = int(message.text) if message.text.isdigit() else 1
-#     data = await state.get_data()
-#     await state.clear()
-
-#     async with SessionFactory() as session:
-#         server = await add_server(
-#             session,
-#             name=data["name"],
-#             ip=data["ip"],
-#             port=data["port"],
-#             location_code=data["location_code"],
-#             inbound_id=inbound_id
-#         )
-
-#     await message.answer(
-#         f"✅ Server added!\n"
-#         f"🖥 {server.name} ({server.location_code.upper()})\n"
-#         f"🔌 {server.ip}:{server.port}"
-#     )
 
 @router.message(IsAdmin(), AdminState.add_server_inbound)
 async def add_server_inbound(message: Message, state: FSMContext):
@@ -868,3 +852,32 @@ async def add_server_uri(message: Message, state: FSMContext):
         f"🖥 {server.name} ({server.location_code.upper()})\n"
         f"🔌 {server.ip}:{server.port}{server.uri_path}"
     )
+
+
+@router.callback_query(IsAdmin(), F.data.startswith("edit_max_users:"))
+async def edit_max_users_callback(call: CallbackQuery, state: FSMContext):
+    server_id = int(call.data.split(":")[1])
+    await state.update_data(server_id=server_id)
+    await call.message.answer("👥 Enter new max users limit:")
+    await state.set_state(AdminState.edit_max_users)
+    await call.answer()
+
+
+@router.message(IsAdmin(), AdminState.edit_max_users)
+async def process_edit_max_users(message: Message, state: FSMContext):
+    if not message.text.isdigit():
+        await message.answer("❌ Enter a number:")
+        return
+
+    max_users = int(message.text)
+    data = await state.get_data()
+    server_id = data["server_id"]
+    await state.clear()
+
+    async with SessionFactory() as session:
+        from db.models import Server
+        server = await session.get(Server, server_id)
+        server.max_users = max_users
+        await session.commit()
+
+    await message.answer(f"✅ Max users updated to {max_users}")

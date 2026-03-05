@@ -29,9 +29,10 @@ def menu_inline() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🛟 Support", url="https://t.me/unlimitz"),
         InlineKeyboardButton(text="📖 About us", callback_data="about_us"),
         InlineKeyboardButton(text="📢 Channel", url="https://t.me/unlimitzproject"),
+        InlineKeyboardButton(text="📄 Terms", callback_data="terms"),
         InlineKeyboardButton(text="🌐 Our website", url="https://unlimitz.space/")
     )
-    builder.adjust(1, 1, 2, 2, 1)
+    builder.adjust(1, 1, 2, 2, 1, 1)
     return builder.as_markup()
 
 
