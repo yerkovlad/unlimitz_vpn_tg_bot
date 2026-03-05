@@ -169,7 +169,8 @@ async def confirm_purchase_callback(call: CallbackQuery):
         now = datetime.utcnow()
         name = f"user_{call.from_user.id}_{plan.id}_{location_code}_{int(time.time())}"
 
-        result = await generate_vless_link(server, name, days=days, traffic_gb=100)
+        traffic_gb = plan.duration_months * 100
+        result = await generate_vless_link(server, name, days=days, traffic_gb=traffic_gb)
         if not result:
             user.balance += price
             await session.commit()

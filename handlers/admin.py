@@ -39,6 +39,7 @@ class AdminState(StatesGroup):
     change_ref_balance = State()
     add_location_code = State()
     add_location_name = State()
+    add_server_uri = State()
 
 
 async def get_users_page(page: int):
@@ -598,27 +599,34 @@ async def add_server_location(message: Message, state: FSMContext):
     await state.set_state(AdminState.add_server_inbound)
 
 
+# @router.message(IsAdmin(), AdminState.add_server_inbound)
+# async def add_server_inbound(message: Message, state: FSMContext):
+#     inbound_id = int(message.text) if message.text.isdigit() else 1
+#     data = await state.get_data()
+#     await state.clear()
+
+#     async with SessionFactory() as session:
+#         server = await add_server(
+#             session,
+#             name=data["name"],
+#             ip=data["ip"],
+#             port=data["port"],
+#             location_code=data["location_code"],
+#             inbound_id=inbound_id
+#         )
+
+#     await message.answer(
+#         f"✅ Server added!\n"
+#         f"🖥 {server.name} ({server.location_code.upper()})\n"
+#         f"🔌 {server.ip}:{server.port}"
+#     )
+
 @router.message(IsAdmin(), AdminState.add_server_inbound)
 async def add_server_inbound(message: Message, state: FSMContext):
     inbound_id = int(message.text) if message.text.isdigit() else 1
-    data = await state.get_data()
-    await state.clear()
-
-    async with SessionFactory() as session:
-        server = await add_server(
-            session,
-            name=data["name"],
-            ip=data["ip"],
-            port=data["port"],
-            location_code=data["location_code"],
-            inbound_id=inbound_id
-        )
-
-    await message.answer(
-        f"✅ Server added!\n"
-        f"🖥 {server.name} ({server.location_code.upper()})\n"
-        f"🔌 {server.ip}:{server.port}"
-    )
+    await state.update_data(inbound_id=inbound_id)
+    await message.answer("Enter URI path (e.g. /xk92mq7p/ or just / for default):")
+    await state.set_state(AdminState.add_server_uri)
 
 
 def user_subs_inline(subs, user_id: int) -> InlineKeyboardMarkup:
@@ -831,3 +839,32 @@ async def delete_location_callback(call: CallbackQuery):
     await call.answer(f"✅ {name} deleted", show_alert=True)
     await call.message.delete()
     await call.message.answer("🌍 <b>Manage Locations:</b>", reply_markup=locations_manage_inline(locations))
+
+
+@router.message(IsAdmin(), AdminState.add_server_uri)
+async def add_server_uri(message: Message, state: FSMContext):
+    uri_path = message.text.strip()
+    if not uri_path.startswith("/"):
+        uri_path = "/" + uri_path
+    if not uri_path.endswith("/"):
+        uri_path = uri_path + "/"
+
+    data = await state.get_data()
+    await state.clear()
+
+    async with SessionFactory() as session:
+        server = await add_server(
+            session,
+            name=data["name"],
+            ip=data["ip"],
+            port=data["port"],
+            location_code=data["location_code"],
+            inbound_id=data["inbound_id"],
+            uri_path=uri_path
+        )
+
+    await message.answer(
+        f"✅ Server added!\n"
+        f"🖥 {server.name} ({server.location_code.upper()})\n"
+        f"🔌 {server.ip}:{server.port}{server.uri_path}"
+    )

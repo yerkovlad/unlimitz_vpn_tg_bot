@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 
 
 class VlessClient:
-    def __init__(self, ip: str, port: int, inbound_id: int):
-        self.base_url = f"http://{ip}:{port}"
+    def __init__(self, ip: str, port: int, inbound_id: int, uri_path: str = "/"):
+        self.base_url = f"https://{ip}:{port}{uri_path.rstrip('/')}"
         self.inbound_id = inbound_id
         self.ip = ip
         self._session: aiohttp.ClientSession | None = None
@@ -123,7 +123,7 @@ class VlessClient:
 
 async def generate_vless_link(server, name: str, days: int = 30, traffic_gb: int = 100) -> tuple[str, str] | None:
     try:
-        async with VlessClient(server.ip, server.port, server.inbound_id) as client:
+        async with VlessClient(server.ip, server.port, server.inbound_id, server.uri_path) as client:
             client_id, success = await client.create_client(name, traffic_gb=traffic_gb, days=days)
             if not success:
                 logger.error("create_client failed for server %s", server.ip)
@@ -138,14 +138,14 @@ async def generate_vless_link(server, name: str, days: int = 30, traffic_gb: int
 
 async def check_server_alive(server) -> bool:
     try:
-        async with VlessClient(server.ip, server.port, server.inbound_id) as client:
+        async with VlessClient(server.ip, server.port, server.inbound_id, server.uri_path) as client:
             return await client.ping()
     except Exception:
         return False
 
 async def delete_vless_client(server, profile_id: str) -> bool:
     try:
-        async with VlessClient(server.ip, server.port, server.inbound_id) as client:
+        async with VlessClient(server.ip, server.port, server.inbound_id, server.uri_path) as client:
             return await client.delete_client(profile_id)
     except Exception as e:
         logger.error("delete_vless_client error: %s", e)

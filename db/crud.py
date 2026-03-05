@@ -164,12 +164,14 @@ async def get_servers_by_location(session: AsyncSession, location_code: str) -> 
     return result.scalars().all()
 
 async def add_server(session: AsyncSession, name: str, ip: str, port: int,
-                     location_code: str, inbound_id: int = 1, max_users: int = 40) -> Server:
+                     location_code: str, inbound_id: int = 1, 
+                     max_users: int = 40, uri_path: str = "/") -> Server:
     server = Server(
         name=name, ip=ip, port=port,
         location_code=location_code,
         inbound_id=inbound_id,
-        max_users=max_users
+        max_users=max_users,
+        uri_path=uri_path
     )
     session.add(server)
     await session.commit()

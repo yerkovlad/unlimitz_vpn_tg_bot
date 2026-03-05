@@ -89,6 +89,7 @@ class Server(Base):
     max_users = Column(Integer, nullable=False, default=40)
     current_users = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, default=True)
+    uri_path = Column(String, default="/")
 
     location = relationship("Location", backref="servers")
 
