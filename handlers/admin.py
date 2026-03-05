@@ -539,7 +539,7 @@ async def server_info_callback(call: CallbackQuery):
     alive = await check_server_alive(server)
     status = "🟢 Online" if alive else "🔴 Offline"
     active = "✅ Active" if server.is_active else "❌ Inactive"
-    panel_url = f"https://{server.ip}:{server.port}"
+    panel_url = f"https://{server.ip}:{server.port}{server.uri_path}"
 
     await call.message.delete()
     await call.message.answer(
