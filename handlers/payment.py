@@ -4,11 +4,13 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import aiohttp
+import json
 
 from db.database import SessionFactory
 from db.crud import update_balance
 from payments.crypto import create_invoice, check_invoice
-from payments.nowpayments import create_payment, check_payment, BASE_URL, NOWPAYMENTS_API_KEY, get_min_amount
+from payments.nowpayments import create_payment, check_payment, BASE_URL as NOW_BASE_URL, NOWPAYMENTS_API_KEY, get_min_amount
+from payments.platega import create_invoice as platega_create, check_invoice as platega_check, get_invoice as platega_get
 from keyboards.inline import back_home_inline
 
 router = Router()
@@ -17,6 +19,8 @@ router = Router()
 class PaymentState(StatesGroup):
     waiting_amount_crypto = State()
     waiting_amount_now = State()
+    waiting_amount_card = State()
+    waiting_amount_sbp = State()
 
 
 CURRENCIES = [
@@ -34,6 +38,8 @@ def top_up_method_inline() -> InlineKeyboardMarkup:
     builder.add(
         InlineKeyboardButton(text="🪙 CryptoBot", callback_data="topup_crypto"),
         InlineKeyboardButton(text="💎 NOWPayments", callback_data="topup_now"),
+        InlineKeyboardButton(text="💳 Card (RU)", callback_data="topup_card"),
+        InlineKeyboardButton(text="⚡ SBP", callback_data="topup_sbp"),
     )
     builder.adjust(2)
     builder.row(InlineKeyboardButton(text="🏠 Home", callback_data="back_home"))
@@ -73,6 +79,17 @@ def now_payment_inline(payment_id: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def platega_payment_inline(pay_url: str, transaction_id: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.add(
+        InlineKeyboardButton(text="💳 Pay", url=pay_url),
+        InlineKeyboardButton(text="✅ Check Payment", callback_data=f"platega_check:{transaction_id}"),
+    )
+    builder.adjust(1)
+    builder.row(InlineKeyboardButton(text="🏠 Home", callback_data="back_home"))
+    return builder.as_markup()
+
+
 # ── Top Up entry point ──────────────────────────────────────────────
 
 @router.callback_query(F.data == "top_up")
@@ -100,12 +117,10 @@ async def process_crypto_amount(message: Message, state: FSMContext):
     if not message.text.replace(".", "").isdigit():
         await message.answer("❌ Invalid amount. Enter a number:")
         return
-
     amount = float(message.text)
     if amount < 1:
         await message.answer("❌ Minimum amount is $1. Enter again:")
         return
-
     await state.clear()
 
     invoice = await create_invoice(
@@ -113,7 +128,6 @@ async def process_crypto_amount(message: Message, state: FSMContext):
         user_id=message.from_user.id,
         description=f"Unlimitz VPN — top up {amount}$"
     )
-
     await message.answer(
         f"🧾 <b>Invoice created</b>\n\n"
         f"💲 Amount: <code>{amount} USDT</code>\n"
@@ -176,7 +190,6 @@ async def process_now_amount(message: Message, state: FSMContext):
     if not message.text.replace(".", "").isdigit():
         await message.answer("❌ Invalid amount. Enter a number:")
         return
-
     amount = float(message.text)
     data = await state.get_data()
     currency = data.get("currency", "usdttrc20")
@@ -212,7 +225,6 @@ async def process_now_amount(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith("now_check:"))
 async def now_check_callback(call: CallbackQuery):
     payment_id = call.data.split(":")[1]
-
     status = await check_payment(payment_id)
 
     if status not in ("finished", "confirmed", "partially_paid"):
@@ -221,10 +233,10 @@ async def now_check_callback(call: CallbackQuery):
 
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f"{BASE_URL}/payment/{payment_id}",
+            f"{NOW_BASE_URL}/payment/{payment_id}",
             headers={"x-api-key": NOWPAYMENTS_API_KEY}
         ) as r:
-            data = await r.json()
+            data = json.loads(await r.text())
             amount = float(data.get("price_amount", 0))
 
     async with SessionFactory() as session:
@@ -234,6 +246,98 @@ async def now_check_callback(call: CallbackQuery):
     await call.message.answer(
         f"✅ <b>Payment confirmed!</b>\n\n"
         f"💲 Added: <code>{amount}$</code>\n"
+        f"💰 New balance: <code>{user.balance}$</code>",
+        reply_markup=back_home_inline()
+    )
+    await call.answer()
+
+
+# ── Platega (Card / SBP) ────────────────────────────────────────────
+
+@router.callback_query(F.data == "topup_card")
+async def topup_card_callback(call: CallbackQuery, state: FSMContext):
+    await call.message.delete()
+    await call.message.answer("💳 <b>Enter amount in RUB (min 100₽):</b>")
+    await state.set_state(PaymentState.waiting_amount_card)
+    await call.answer()
+
+
+@router.callback_query(F.data == "topup_sbp")
+async def topup_sbp_callback(call: CallbackQuery, state: FSMContext):
+    await call.message.delete()
+    await call.message.answer("⚡ <b>Enter amount in RUB (min 100₽):</b>")
+    await state.set_state(PaymentState.waiting_amount_sbp)
+    await call.answer()
+
+
+@router.message(PaymentState.waiting_amount_card)
+async def process_card_amount(message: Message, state: FSMContext):
+    if not message.text.replace(".", "").isdigit():
+        await message.answer("❌ Invalid amount. Enter a number:")
+        return
+    amount = float(message.text)
+    if amount < 100:
+        await message.answer("❌ Minimum amount is 100₽. Enter again:")
+        return
+    await state.clear()
+
+    invoice = await platega_create(amount, message.from_user.id, method="card")
+    if not invoice or not invoice.get("transactionId"):
+        await message.answer("❌ Payment creation failed. Try again.")
+        return
+
+    await message.answer(
+        f"💳 <b>Card Payment</b>\n\n"
+        f"💲 Amount: <code>{amount}₽</code>\n\n"
+        f"Press <b>Pay</b> to open payment page.",
+        reply_markup=platega_payment_inline(invoice.get("redirect"), str(invoice.get("transactionId")))
+    )
+
+
+@router.message(PaymentState.waiting_amount_sbp)
+async def process_sbp_amount(message: Message, state: FSMContext):
+    if not message.text.replace(".", "").isdigit():
+        await message.answer("❌ Invalid amount. Enter a number:")
+        return
+    amount = float(message.text)
+    if amount < 100:
+        await message.answer("❌ Minimum amount is 100₽. Enter again:")
+        return
+    await state.clear()
+
+    invoice = await platega_create(amount, message.from_user.id, method="sbp")
+    if not invoice or not invoice.get("transactionId"):
+        await message.answer("❌ Payment creation failed. Try again.")
+        return
+
+    await message.answer(
+        f"⚡ <b>SBP Payment</b>\n\n"
+        f"💲 Amount: <code>{amount}₽</code>\n\n"
+        f"Press <b>Pay</b> to open payment page.",
+        reply_markup=platega_payment_inline(invoice.get("redirect"), str(invoice.get("transactionId")))
+    )
+
+
+@router.callback_query(F.data.startswith("platega_check:"))
+async def platega_check_callback(call: CallbackQuery):
+    transaction_id = call.data.split(":")[1]
+
+    status = await platega_check(transaction_id)
+    if status != "CONFIRMED":
+        await call.answer(f"⏳ Status: {status}. Try again later.", show_alert=True)
+        return
+
+    invoice = await platega_get(transaction_id)
+    amount_rub = float(invoice.get("paymentDetails", {}).get("amount", 0))
+    usd_amount = round(amount_rub / 90, 2)
+
+    async with SessionFactory() as session:
+        user = await update_balance(session, call.from_user.id, usd_amount)
+
+    await call.message.delete()
+    await call.message.answer(
+        f"✅ <b>Payment confirmed!</b>\n\n"
+        f"💲 Added: <code>{usd_amount}$</code> ({amount_rub}₽)\n"
         f"💰 New balance: <code>{user.balance}$</code>",
         reply_markup=back_home_inline()
     )

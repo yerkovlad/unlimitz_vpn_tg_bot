@@ -121,6 +121,8 @@ async def user_info_callback(call: CallbackQuery):
 
     async with SessionFactory() as session:
         user = await session.get(User, user_id)
+        from db.crud import get_user_ref_percent
+        percent = await get_user_ref_percent(session, user_id)
 
     if not user:
         await call.answer("User not found", show_alert=True)
@@ -133,7 +135,8 @@ async def user_info_callback(call: CallbackQuery):
         f"🆔 ID: <code>{user.id}</code>\n"
         f"👤 Username: {username}\n"
         f"💲 Balance: <code>{user.balance:.2f}$</code>\n"
-        f"💰 Ref Balance: <code>{user.ref_balance:.2f}$</code>",
+        f"💰 Ref Balance: <code>{user.ref_balance:.2f}$</code>\n"
+        f"📊 Ref Percent: <code>{percent}%</code>",
         reply_markup=user_manage_inline(user.id)
     )
     await call.answer()

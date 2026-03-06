@@ -3,7 +3,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from db.database import SessionFactory
-from db.crud import get_referral_stats, get_or_create_user
+from db.crud import get_referral_stats, get_or_create_user, get_user_ref_percent
 from db.models import User
 from keyboards.inline import back_home_inline
 
@@ -36,11 +36,12 @@ async def earn_callback(call: CallbackQuery):
         stats = await get_referral_stats(session, call.from_user.id)
         user = await session.get(User, call.from_user.id)
         ref_balance = user.ref_balance if user else 0.0
+        percent = await get_user_ref_percent(session, call.from_user.id)
 
     await call.message.delete()
     await call.message.answer(
         f"💰 <b>Earn with Unlimitz</b>\n\n"
-        f"Invite friends and earn from every purchase they make.\n\n"
+        f"Invite friends and earn <b>{percent}%</b> from every purchase they make.\n\n"
         f"🔗 <b>Your referral link:</b>\n<code>{ref_link}</code>\n\n"
         f"👥 People invited: <b>{stats['total_refs']}</b>\n"
         f"💲 Total earned: <b>{stats['total_earned']:.2f}$</b>\n"

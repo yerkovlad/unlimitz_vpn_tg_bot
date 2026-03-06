@@ -73,16 +73,14 @@ def admin_panel_inline() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 def user_manage_inline(user_id: int) -> InlineKeyboardMarkup:
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    from aiogram.types import InlineKeyboardButton
-
     builder = InlineKeyboardBuilder()
     builder.add(
         InlineKeyboardButton(text="➕ Add Balance", callback_data=f"add_balance:{user_id}"),
         InlineKeyboardButton(text="➖ Remove Balance", callback_data=f"remove_balance:{user_id}"),
         InlineKeyboardButton(text="💰 Edit Ref Balance", callback_data=f"edit_ref_balance:{user_id}"),
+        InlineKeyboardButton(text="📊 Edit Ref %", callback_data=f"change_ref_percent:{user_id}"),
         InlineKeyboardButton(text="📋 Subscriptions", callback_data=f"admin_user_subs:{user_id}"),
         InlineKeyboardButton(text="◀️ Back", callback_data="users_list:0")
     )
-    builder.adjust(2, 1, 1, 1)
+    builder.adjust(2, 2, 1, 1)
     return builder.as_markup()
