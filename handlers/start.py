@@ -87,3 +87,18 @@ async def terms_callback(call: CallbackQuery):
         reply_markup=back_home_inline()
     )
     await call.answer()
+
+@router.callback_query(F.data == "info")
+async def info_callback(call: CallbackQuery):
+    await call.message.delete()
+    await call.message.answer(
+        "ℹ️ <b>Information</b>\n\n"
+        "📄 <a href='https://telegra.ph/Privacy-Policy--Unlimitz-VPN-03-06'>Privacy Policy</a>\n"
+        "📋 <a href='https://telegra.ph/Terms-of-Service--Unlimitz-VPN-03-06'>Terms of Service</a>\n\n"
+        "📱 Bot: @unlimitz_vpn_bot\n"
+        "🌐 Site: unlimitz.space\n"
+        "👤 Support: @unlimitz",
+        reply_markup=back_home_inline(),
+        disable_web_page_preview=True
+    )
+    await call.answer()
