@@ -137,6 +137,7 @@ class PromoCode(Base):
     expires_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    duration_days = Column(Integer, nullable=True)
 
     plan = relationship("Plan")
     location = relationship("Location")
