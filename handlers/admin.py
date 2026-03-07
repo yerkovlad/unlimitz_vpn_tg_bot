@@ -41,6 +41,7 @@ class AdminState(StatesGroup):
     add_location_name = State()
     add_server_uri = State()
     edit_max_users = State()
+    broadcast_text = State()
 
 
 async def get_users_page(page: int):
@@ -884,3 +885,54 @@ async def process_edit_max_users(message: Message, state: FSMContext):
         await session.commit()
 
     await message.answer(f"✅ Max users updated to {max_users}")
+
+
+@router.callback_query(IsAdmin(), F.data == "admin_broadcast")
+async def admin_broadcast_callback(call: CallbackQuery, state: FSMContext):
+    await call.message.delete()
+    await call.message.answer(
+        "📢 <b>Broadcast</b>\n\n"
+        "Send a message to all users.\n"
+        "You can use HTML formatting.\n\n"
+        "Enter your message:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Cancel", callback_data="admin_panel")]
+        ])
+    )
+    await state.set_state(AdminState.broadcast_text)
+    await call.answer()
+
+
+@router.message(IsAdmin(), AdminState.broadcast_text)
+async def process_broadcast(message: Message, state: FSMContext):
+    await state.clear()
+
+    async with SessionFactory() as session:
+        from sqlalchemy import select
+        from db.models import User
+        result = await session.execute(select(User))
+        users = result.scalars().all()
+
+    total = len(users)
+    success = 0
+    failed = 0
+
+    status_msg = await message.answer(f"📢 Sending to {total} users...")
+
+    for user in users:
+        try:
+            await message.bot.send_message(
+                user.id,
+                message.text or message.caption or "",
+                parse_mode="HTML"
+            )
+            success += 1
+        except Exception:
+            failed += 1
+
+    await status_msg.edit_text(
+        f"📢 <b>Broadcast complete</b>\n\n"
+        f"✅ Sent: {success}\n"
+        f"❌ Failed: {failed}\n"
+        f"👥 Total: {total}"
+    )

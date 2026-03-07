@@ -67,9 +67,10 @@ def admin_panel_inline() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🌍 Manage Locations", callback_data="manage_locations"),
         InlineKeyboardButton(text="🖥 Servers", callback_data="servers_stats:0"),
         InlineKeyboardButton(text="📊 Statistics", callback_data="admin_stats"),
+        InlineKeyboardButton(text="📢 Broadcast", callback_data="admin_broadcast"),
         InlineKeyboardButton(text="🏠 Home", callback_data="back_home")
     )
-    builder.adjust(2, 1, 1, 2, 1)
+    builder.adjust(2, 1, 1, 2, 1, 1)
     return builder.as_markup()
 
 def user_manage_inline(user_id: int) -> InlineKeyboardMarkup:
