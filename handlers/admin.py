@@ -15,6 +15,7 @@ from db.models import User, Plan, Location
 from db.crud import get_all_plans, update_plan_price, toggle_plan, get_all_locations, toggle_location
 
 from db.crud import get_all_servers, get_servers_by_location, add_server
+from db.crud import get_all_promos, create_promo, delete_promo, toggle_promo, get_promo
 from vless.api import check_server_alive
 from db.crud import get_subscription, delete_subscription, get_user_subscriptions
 from db.models import Server
