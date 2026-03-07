@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Admin, User, Subscription, Plan, Location, PlanPrice, Server, Referral, ReferralEarning, ReferralSettings
+from .models import *
 
 
 # --- Admins ---
