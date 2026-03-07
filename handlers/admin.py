@@ -42,6 +42,11 @@ class AdminState(StatesGroup):
     add_server_uri = State()
     edit_max_users = State()
     broadcast_text = State()
+    promo_code = State()
+    promo_plan = State()
+    promo_location = State()
+    promo_uses = State()
+    promo_expires = State()
 
 
 async def get_users_page(page: int):
@@ -935,4 +940,200 @@ async def process_broadcast(message: Message, state: FSMContext):
         f"✅ Sent: {success}\n"
         f"❌ Failed: {failed}\n"
         f"👥 Total: {total}"
+    )
+
+
+from db.crud import get_all_promos, create_promo, delete_promo, toggle_promo
+from db.models import PromoCode
+
+
+def promos_inline(promos: list) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for promo in promos:
+        status = "✅" if promo.is_active else "❌"
+        builder.add(InlineKeyboardButton(
+            text=f"{status} {promo.code} ({promo.used_count}/{promo.max_uses})",
+            callback_data=f"promo_info:{promo.id}"
+        ))
+    builder.adjust(1)
+    builder.row(
+        InlineKeyboardButton(text="➕ Create", callback_data="promo_create"),
+        InlineKeyboardButton(text="< Back", callback_data="admin_panel")
+    )
+    return builder.as_markup()
+
+
+def promo_info_inline(promo_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.add(
+        InlineKeyboardButton(text="🔄 Toggle", callback_data=f"promo_toggle:{promo_id}"),
+        InlineKeyboardButton(text="🗑 Delete", callback_data=f"promo_delete:{promo_id}"),
+        InlineKeyboardButton(text="< Back", callback_data="admin_promos")
+    )
+    builder.adjust(2, 1)
+    return builder.as_markup()
+
+
+@router.callback_query(IsAdmin(), F.data == "admin_promos")
+async def admin_promos_callback(call: CallbackQuery):
+    async with SessionFactory() as session:
+        promos = await get_all_promos(session)
+
+    await call.message.delete()
+    await call.message.answer(
+        f"🎁 <b>Promo Codes</b> ({len(promos)} total)",
+        reply_markup=promos_inline(promos)
+    )
+    await call.answer()
+
+
+@router.callback_query(IsAdmin(), F.data.startswith("promo_info:"))
+async def promo_info_callback(call: CallbackQuery):
+    promo_id = int(call.data.split(":")[1])
+
+    async with SessionFactory() as session:
+        promo = await session.get(PromoCode, promo_id)
+        await session.refresh(promo, ["plan", "location"])
+
+    expires = promo.expires_at.strftime("%d.%m.%Y") if promo.expires_at else "No limit"
+    status = "✅ Active" if promo.is_active else "❌ Inactive"
+
+    await call.message.delete()
+    await call.message.answer(
+        f"🎁 <b>Promo: {promo.code}</b>\n\n"
+        f"📊 Status: {status}\n"
+        f"🌍 Location: {promo.location.name}\n"
+        f"📅 Plan: {promo.plan.duration_months} month(s)\n"
+        f"👥 Uses: {promo.used_count}/{promo.max_uses}\n"
+        f"⏳ Expires: {expires}",
+        reply_markup=promo_info_inline(promo_id)
+    )
+    await call.answer()
+
+
+@router.callback_query(IsAdmin(), F.data.startswith("promo_toggle:"))
+async def promo_toggle_callback(call: CallbackQuery):
+    promo_id = int(call.data.split(":")[1])
+    async with SessionFactory() as session:
+        await toggle_promo(session, promo_id)
+    await promo_info_callback(call)
+
+
+@router.callback_query(IsAdmin(), F.data.startswith("promo_delete:"))
+async def promo_delete_callback(call: CallbackQuery):
+    promo_id = int(call.data.split(":")[1])
+    async with SessionFactory() as session:
+        await delete_promo(session, promo_id)
+
+    await call.answer("✅ Deleted", show_alert=True)
+    async with SessionFactory() as session:
+        promos = await get_all_promos(session)
+    await call.message.delete()
+    await call.message.answer(
+        f"🎁 <b>Promo Codes</b> ({len(promos)} total)",
+        reply_markup=promos_inline(promos)
+    )
+
+
+@router.callback_query(IsAdmin(), F.data == "promo_create")
+async def promo_create_callback(call: CallbackQuery, state: FSMContext):
+    await call.message.answer("Enter promo code (e.g. SUMMER2026):")
+    await state.set_state(AdminState.promo_code)
+    await call.answer()
+
+
+@router.message(IsAdmin(), AdminState.promo_code)
+async def process_promo_code_input(message: Message, state: FSMContext):
+    code = message.text.strip().upper()
+    async with SessionFactory() as session:
+        existing = await get_promo(session, code)
+    if existing:
+        await message.answer("❌ This code already exists. Enter another:")
+        return
+    await state.update_data(code=code)
+
+    async with SessionFactory() as session:
+        plans = await get_all_plans(session)
+    builder = InlineKeyboardBuilder()
+    for plan in plans:
+        if plan.is_active:
+            builder.add(InlineKeyboardButton(
+                text=f"{plan.duration_months} month(s)",
+                callback_data=f"promo_set_plan:{plan.id}"
+            ))
+    builder.adjust(2)
+    await message.answer("Select plan:", reply_markup=builder.as_markup())
+    await state.set_state(AdminState.promo_plan)
+
+
+@router.callback_query(IsAdmin(), AdminState.promo_plan, F.data.startswith("promo_set_plan:"))
+async def process_promo_plan(call: CallbackQuery, state: FSMContext):
+    plan_id = int(call.data.split(":")[1])
+    await state.update_data(plan_id=plan_id)
+
+    async with SessionFactory() as session:
+        locations = await get_all_locations(session)
+    builder = InlineKeyboardBuilder()
+    for loc in locations:
+        if loc.is_active:
+            builder.add(InlineKeyboardButton(
+                text=loc.name,
+                callback_data=f"promo_set_loc:{loc.code}"
+            ))
+    builder.adjust(2)
+    await call.message.answer("Select location:", reply_markup=builder.as_markup())
+    await state.set_state(AdminState.promo_location)
+    await call.answer()
+
+
+@router.callback_query(IsAdmin(), AdminState.promo_location, F.data.startswith("promo_set_loc:"))
+async def process_promo_location(call: CallbackQuery, state: FSMContext):
+    location_code = call.data.split(":")[1]
+    await state.update_data(location_code=location_code)
+    await call.message.answer("Enter max uses (e.g. 1 or 100):")
+    await state.set_state(AdminState.promo_uses)
+    await call.answer()
+
+
+@router.message(IsAdmin(), AdminState.promo_uses)
+async def process_promo_uses(message: Message, state: FSMContext):
+    if not message.text.isdigit():
+        await message.answer("❌ Enter a number:")
+        return
+    await state.update_data(max_uses=int(message.text))
+    await message.answer(
+        "Enter expiry date (DD.MM.YYYY) or send - for no limit:"
+    )
+    await state.set_state(AdminState.promo_expires)
+
+
+@router.message(IsAdmin(), AdminState.promo_expires)
+async def process_promo_expires(message: Message, state: FSMContext):
+    expires_at = None
+    if message.text.strip() != "-":
+        try:
+            expires_at = datetime.strptime(message.text.strip(), "%d.%m.%Y")
+        except ValueError:
+            await message.answer("❌ Invalid date format. Use DD.MM.YYYY or - for no limit:")
+            return
+
+    data = await state.get_data()
+    await state.clear()
+
+    async with SessionFactory() as session:
+        promo = await create_promo(
+            session,
+            code=data["code"],
+            plan_id=data["plan_id"],
+            location_code=data["location_code"],
+            max_uses=data["max_uses"],
+            expires_at=expires_at
+        )
+
+    expires_str = expires_at.strftime("%d.%m.%Y") if expires_at else "No limit"
+    await message.answer(
+        f"✅ <b>Promo code created!</b>\n\n"
+        f"🎁 Code: <code>{promo.code}</code>\n"
+        f"👥 Max uses: {promo.max_uses}\n"
+        f"⏳ Expires: {expires_str}"
     )

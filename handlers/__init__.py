@@ -12,6 +12,7 @@ from .buy import router as buy_router
 from .subs import router as subs_router
 from .payment import router as payment_router
 from .stats import router as stats_router
+from .promo import router as promo_router
 
 router = Router()
 router.include_router(start_router)
@@ -26,3 +27,4 @@ router.include_router(buy_router)
 router.include_router(subs_router)
 router.include_router(payment_router)
 router.include_router(stats_router)
+router.include_router(promo_router)

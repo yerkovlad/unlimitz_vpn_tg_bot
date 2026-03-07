@@ -324,3 +324,28 @@ async def get_bot_stats(session: AsyncSession, period: str = "all") -> dict:
         "revenue": revenue,
         "total_refs": total_refs
     }
+
+class PromoCode(Base):
+    __tablename__ = "promo_codes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, unique=True, nullable=False)
+    plan_id = Column(Integer, ForeignKey("plans.id"), nullable=False)
+    location_code = Column(String, ForeignKey("locations.code"), nullable=False)
+    max_uses = Column(Integer, default=1)
+    used_count = Column(Integer, default=0)
+    expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    plan = relationship("Plan")
+    location = relationship("Location")
+
+
+class PromoActivation(Base):
+    __tablename__ = "promo_activations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    promo_id = Column(Integer, ForeignKey("promo_codes.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    activated_at = Column(DateTime, default=datetime.utcnow)
