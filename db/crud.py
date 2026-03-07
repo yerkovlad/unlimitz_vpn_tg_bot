@@ -324,3 +324,62 @@ async def get_bot_stats(session: AsyncSession, period: str = "all") -> dict:
         "revenue": revenue,
         "total_refs": total_refs
     }
+
+
+from db.models import PromoCode, PromoActivation
+
+async def get_promo(session: AsyncSession, code: str) -> PromoCode | None:
+    result = await session.execute(
+        select(PromoCode).where(PromoCode.code == code.upper())
+    )
+    return result.scalar_one_or_none()
+
+
+async def activate_promo(session: AsyncSession, promo: PromoCode, user_id: int) -> bool:
+    existing = await session.execute(
+        select(PromoActivation).where(
+            PromoActivation.promo_id == promo.id,
+            PromoActivation.user_id == user_id
+        )
+    )
+    if existing.scalar_one_or_none():
+        return False
+    promo.used_count += 1
+    session.add(PromoActivation(promo_id=promo.id, user_id=user_id))
+    await session.commit()
+    return True
+
+
+async def get_all_promos(session: AsyncSession) -> list[PromoCode]:
+    result = await session.execute(select(PromoCode).order_by(PromoCode.created_at.desc()))
+    return result.scalars().all()
+
+
+async def create_promo(session: AsyncSession, code: str, plan_id: int,
+                       location_code: str, max_uses: int,
+                       expires_at=None) -> PromoCode:
+    promo = PromoCode(
+        code=code.upper(),
+        plan_id=plan_id,
+        location_code=location_code,
+        max_uses=max_uses,
+        expires_at=expires_at
+    )
+    session.add(promo)
+    await session.commit()
+    await session.refresh(promo)
+    return promo
+
+
+async def delete_promo(session: AsyncSession, promo_id: int):
+    promo = await session.get(PromoCode, promo_id)
+    if promo:
+        await session.delete(promo)
+        await session.commit()
+
+
+async def toggle_promo(session: AsyncSession, promo_id: int):
+    promo = await session.get(PromoCode, promo_id)
+    if promo:
+        promo.is_active = not promo.is_active
+        await session.commit()
