@@ -1055,36 +1055,28 @@ async def process_promo_code_input(message: Message, state: FSMContext):
 
     async with SessionFactory() as session:
         plans = await get_all_plans(session)
+
     builder = InlineKeyboardBuilder()
+
+    # Короткие сроки
+    for days, label in [(1, "1 day"), (3, "3 days"), (7, "7 days"), (14, "14 days")]:
+        builder.add(InlineKeyboardButton(
+            text=label,
+            callback_data=f"promo_set_days:{days}"
+        ))
+    builder.adjust(4)
+
+    # Планы по месяцам
     for plan in plans:
         if plan.is_active:
             builder.add(InlineKeyboardButton(
                 text=f"{plan.duration_months} month(s)",
                 callback_data=f"promo_set_plan:{plan.id}"
             ))
-    builder.adjust(2)
-    await message.answer("Select plan:", reply_markup=builder.as_markup())
+    builder.adjust(4, 2)
+
+    await message.answer("Select duration:", reply_markup=builder.as_markup())
     await state.set_state(AdminState.promo_plan)
-
-
-@router.callback_query(IsAdmin(), AdminState.promo_plan, F.data.startswith("promo_set_plan:"))
-async def process_promo_plan(call: CallbackQuery, state: FSMContext):
-    plan_id = int(call.data.split(":")[1])
-    await state.update_data(plan_id=plan_id)
-
-    async with SessionFactory() as session:
-        locations = await get_all_locations(session)
-    builder = InlineKeyboardBuilder()
-    for loc in locations:
-        if loc.is_active:
-            builder.add(InlineKeyboardButton(
-                text=loc.name,
-                callback_data=f"promo_set_loc:{loc.code}"
-            ))
-    builder.adjust(2)
-    await call.message.answer("Select location:", reply_markup=builder.as_markup())
-    await state.set_state(AdminState.promo_location)
-    await call.answer()
 
 
 @router.callback_query(IsAdmin(), AdminState.promo_location, F.data.startswith("promo_set_loc:"))
@@ -1115,7 +1107,7 @@ async def process_promo_expires(message: Message, state: FSMContext):
         try:
             expires_at = datetime.strptime(message.text.strip(), "%d.%m.%Y")
         except ValueError:
-            await message.answer("❌ Invalid date format. Use DD.MM.YYYY or - for no limit:")
+            await message.answer("❌ Invalid date format. Use DD.MM.YYYY or -:")
             return
 
     data = await state.get_data()
@@ -1125,16 +1117,58 @@ async def process_promo_expires(message: Message, state: FSMContext):
         promo = await create_promo(
             session,
             code=data["code"],
-            plan_id=data["plan_id"],
+            plan_id=data.get("plan_id"),
             location_code=data["location_code"],
             max_uses=data["max_uses"],
-            expires_at=expires_at
+            expires_at=expires_at,
+            duration_days=data.get("duration_days")
         )
 
+    duration_str = f"{data['duration_days']} day(s)" if data.get("duration_days") else f"from plan"
     expires_str = expires_at.strftime("%d.%m.%Y") if expires_at else "No limit"
     await message.answer(
         f"✅ <b>Promo code created!</b>\n\n"
         f"🎁 Code: <code>{promo.code}</code>\n"
+        f"⏳ Duration: {duration_str}\n"
         f"👥 Max uses: {promo.max_uses}\n"
-        f"⏳ Expires: {expires_str}"
+        f"📅 Expires: {expires_str}"
     )
+
+@router.callback_query(IsAdmin(), AdminState.promo_plan, F.data.startswith("promo_set_days:"))
+async def process_promo_days(call: CallbackQuery, state: FSMContext):
+    days = int(call.data.split(":")[1])
+    await state.update_data(plan_id=None, duration_days=days)
+
+    async with SessionFactory() as session:
+        locations = await get_all_locations(session)
+    builder = InlineKeyboardBuilder()
+    for loc in locations:
+        if loc.is_active:
+            builder.add(InlineKeyboardButton(
+                text=loc.name,
+                callback_data=f"promo_set_loc:{loc.code}"
+            ))
+    builder.adjust(2)
+    await call.message.answer("Select location:", reply_markup=builder.as_markup())
+    await state.set_state(AdminState.promo_location)
+    await call.answer()
+
+
+@router.callback_query(IsAdmin(), AdminState.promo_plan, F.data.startswith("promo_set_plan:"))
+async def process_promo_plan(call: CallbackQuery, state: FSMContext):
+    plan_id = int(call.data.split(":")[1])
+    await state.update_data(plan_id=plan_id, duration_days=None)
+
+    async with SessionFactory() as session:
+        locations = await get_all_locations(session)
+    builder = InlineKeyboardBuilder()
+    for loc in locations:
+        if loc.is_active:
+            builder.add(InlineKeyboardButton(
+                text=loc.name,
+                callback_data=f"promo_set_loc:{loc.code}"
+            ))
+    builder.adjust(2)
+    await call.message.answer("Select location:", reply_markup=builder.as_markup())
+    await state.set_state(AdminState.promo_location)
+    await call.answer()

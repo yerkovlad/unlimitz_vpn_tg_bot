@@ -88,8 +88,15 @@ async def process_promo_code(message: Message, state: FSMContext):
 
         # Создание подписки
         plan = promo.plan
-        days = plan.duration_months * 30
-        traffic_gb = plan.duration_months * 100
+        if promo.duration_days:
+            days = promo.duration_days
+            traffic_gb = max(10, promo.duration_days * 3)  # ~3GB в день минимум 10GB
+        elif plan:
+            days = plan.duration_months * 30
+            traffic_gb = plan.duration_months * 100
+        else:
+            days = 30
+            traffic_gb = 100
 
         import time
         name = f"user_{message.from_user.id}_{plan.id}_{promo.location_code}_{int(time.time())}"
