@@ -88,18 +88,19 @@ async def process_promo_code(message: Message, state: FSMContext):
 
         # Создание подписки
         plan = promo.plan
+        # Расчёт дней и трафика
         if promo.duration_days:
             days = promo.duration_days
-            traffic_gb = max(10, promo.duration_days * 3)  # ~3GB в день минимум 10GB
-        elif plan:
+            traffic_gb = max(10, promo.duration_days * 3)
+            plan_id_str = "free"
+        else:
+            plan = promo.plan
             days = plan.duration_months * 30
             traffic_gb = plan.duration_months * 100
-        else:
-            days = 30
-            traffic_gb = 100
+            plan_id_str = str(plan.id)
 
         import time
-        name = f"user_{message.from_user.id}_{plan.id}_{promo.location_code}_{int(time.time())}"
+        name = f"user_{message.from_user.id}_{plan_id_str}_{promo.location_code}_{int(time.time())}"
         result = await generate_vless_link(server, name, days=days, traffic_gb=traffic_gb)
 
         if not result:
