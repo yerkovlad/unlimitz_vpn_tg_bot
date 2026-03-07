@@ -355,15 +355,16 @@ async def get_all_promos(session: AsyncSession) -> list[PromoCode]:
     return result.scalars().all()
 
 
-async def create_promo(session: AsyncSession, code: str, plan_id: int,
+async def create_promo(session: AsyncSession, code: str, plan_id: int | None,
                        location_code: str, max_uses: int,
-                       expires_at=None) -> PromoCode:
+                       expires_at=None, duration_days: int | None = None) -> PromoCode:
     promo = PromoCode(
         code=code.upper(),
         plan_id=plan_id,
         location_code=location_code,
         max_uses=max_uses,
-        expires_at=expires_at
+        expires_at=expires_at,
+        duration_days=duration_days
     )
     session.add(promo)
     await session.commit()
