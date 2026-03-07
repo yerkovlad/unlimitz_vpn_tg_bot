@@ -998,13 +998,14 @@ async def promo_info_callback(call: CallbackQuery):
 
     expires = promo.expires_at.strftime("%d.%m.%Y") if promo.expires_at else "No limit"
     status = "✅ Active" if promo.is_active else "❌ Inactive"
+    plan_str = f"{promo.plan.duration_months} month(s)" if promo.plan else f"{promo.duration_days} day(s)"
 
     await call.message.delete()
     await call.message.answer(
         f"🎁 <b>Promo: {promo.code}</b>\n\n"
         f"📊 Status: {status}\n"
         f"🌍 Location: {promo.location.name}\n"
-        f"📅 Plan: {promo.plan.duration_months} month(s)\n"
+        f"📅 Duration: {plan_str}\n"
         f"👥 Uses: {promo.used_count}/{promo.max_uses}\n"
         f"⏳ Expires: {expires}",
         reply_markup=promo_info_inline(promo_id)
