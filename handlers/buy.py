@@ -7,11 +7,11 @@ import time
 from sqlalchemy import select as sa_select
 
 from db.database import SessionFactory
-from db.crud import get_all_locations, get_available_server, get_price, get_or_create_user, get_active_plans, add_referral_earning
+from db.crud import get_all_locations, get_available_server, get_price, get_or_create_user, get_active_plans, add_referral_earning, get_user_lang
 from db.models import Subscription, Plan, Location, Referral
 from vless.api import generate_vless_link
 from keyboards.inline import back_home_inline
-
+from locales import t
 
 router = Router()
 
@@ -24,7 +24,7 @@ async def get_active_locations():
         return [l for l in locs if l.is_active]
 
 
-def locations_inline(locations, page: int) -> InlineKeyboardMarkup:
+def locations_inline(locations, page: int, lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     total = len(locations)
     start = page * LOCATIONS_PER_PAGE
@@ -46,11 +46,11 @@ def locations_inline(locations, page: int) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text=f"{page + 1} / {total_pages}", callback_data="noop"),
         InlineKeyboardButton(text=">", callback_data=next_cb),
     )
-    builder.row(InlineKeyboardButton(text="Home", callback_data="back_home"))
+    builder.row(InlineKeyboardButton(text=t("btn_back", lang), callback_data="back_home"))
     return builder.as_markup()
 
 
-async def plans_inline_with_prices(plans, location_code: str) -> InlineKeyboardMarkup:
+async def plans_inline_with_prices(plans, location_code: str, lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     async with SessionFactory() as session:
         for plan in plans:
@@ -61,15 +61,15 @@ async def plans_inline_with_prices(plans, location_code: str) -> InlineKeyboardM
                 callback_data=f"select_plan:{location_code}:{plan.id}"
             ))
     builder.adjust(1)
-    builder.row(InlineKeyboardButton(text="< Back", callback_data="buy_vpn_page:0"))
+    builder.row(InlineKeyboardButton(text=t("btn_back_short", lang), callback_data="buy_vpn_page:0"))
     return builder.as_markup()
 
 
-def confirm_purchase_inline(location_code: str, plan_id: int) -> InlineKeyboardMarkup:
+def confirm_purchase_inline(location_code: str, plan_id: int, lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.add(
-        InlineKeyboardButton(text="< Back", callback_data=f"select_location:{location_code}"),
-        InlineKeyboardButton(text="✅ Confirm", callback_data=f"confirm_purchase:{location_code}:{plan_id}")
+        InlineKeyboardButton(text=t("btn_back_short", lang), callback_data=f"select_location:{location_code}"),
+        InlineKeyboardButton(text=t("btn_confirm", lang), callback_data=f"confirm_purchase:{location_code}:{plan_id}")
     )
     builder.adjust(2)
     return builder.as_markup()
@@ -77,18 +77,28 @@ def confirm_purchase_inline(location_code: str, plan_id: int) -> InlineKeyboardM
 
 @router.callback_query(F.data == "buy_vpn")
 async def buy_vpn_callback(call: CallbackQuery):
+    async with SessionFactory() as session:
+        lang = await get_user_lang(session, call.from_user.id)
     locations = await get_active_locations()
     await call.message.delete()
-    await call.message.answer("🌍 <b>Select a location:</b>", reply_markup=locations_inline(locations, 0))
+    await call.message.answer(
+        t("select_location", lang),
+        reply_markup=locations_inline(locations, 0, lang)
+    )
     await call.answer()
 
 
 @router.callback_query(F.data.startswith("buy_vpn_page:"))
 async def buy_vpn_page_callback(call: CallbackQuery):
     page = int(call.data.split(":")[1])
+    async with SessionFactory() as session:
+        lang = await get_user_lang(session, call.from_user.id)
     locations = await get_active_locations()
     await call.message.delete()
-    await call.message.answer("🌍 <b>Select a location:</b>", reply_markup=locations_inline(locations, page))
+    await call.message.answer(
+        t("select_location", lang),
+        reply_markup=locations_inline(locations, page, lang)
+    )
     await call.answer()
 
 
@@ -97,6 +107,7 @@ async def select_location_callback(call: CallbackQuery):
     code = call.data.split(":")[1]
 
     async with SessionFactory() as session:
+        lang = await get_user_lang(session, call.from_user.id)
         location = await session.get(Location, code)
         server = await get_available_server(session, code)
 
@@ -112,8 +123,8 @@ async def select_location_callback(call: CallbackQuery):
 
     await call.message.delete()
     await call.message.answer(
-        f"📅 <b>Select a plan for {location.name}:</b>",
-        reply_markup=await plans_inline_with_prices(plans, code)
+        t("select_plan", lang, location=location.name),
+        reply_markup=await plans_inline_with_prices(plans, code, lang)
     )
     await call.answer()
 
@@ -123,6 +134,7 @@ async def select_plan_callback(call: CallbackQuery):
     _, location_code, plan_id = call.data.split(":")
 
     async with SessionFactory() as session:
+        lang = await get_user_lang(session, call.from_user.id)
         plan = await session.get(Plan, int(plan_id))
         location = await session.get(Location, location_code)
         price_obj = await get_price(session, plan.id, location_code)
@@ -131,12 +143,12 @@ async def select_plan_callback(call: CallbackQuery):
     months = plan.duration_months
     await call.message.delete()
     await call.message.answer(
-        f"🛒 <b>Order Summary:</b>\n\n"
-        f"🌍 Location: {location.name}\n"
-        f"📅 Duration: {months} month{'s' if months > 1 else ''}\n"
-        f"💲 Price: <code>{price}$</code>\n\n"
-        "Confirm your purchase?",
-        reply_markup=confirm_purchase_inline(location_code, plan.id)
+        t("buy_confirm", lang,
+          location=location.name,
+          months=months,
+          traffic=months * 100,
+          price=price),
+        reply_markup=confirm_purchase_inline(location_code, plan.id, lang)
     )
     await call.answer()
 
@@ -146,6 +158,7 @@ async def confirm_purchase_callback(call: CallbackQuery):
     _, location_code, plan_id = call.data.split(":")
 
     async with SessionFactory() as session:
+        lang = await get_user_lang(session, call.from_user.id)
         server = await get_available_server(session, location_code)
         if not server:
             await call.answer("😔 Sorry, this location is currently unavailable.", show_alert=True)
@@ -158,7 +171,7 @@ async def confirm_purchase_callback(call: CallbackQuery):
         user = await get_or_create_user(session, call.from_user.id, call.from_user.username)
         if user.balance < price:
             await call.answer(
-                f"❌ Insufficient balance. Need {price}$, you have {user.balance}$",
+                t("not_enough_balance", lang, balance=round(user.balance, 2)),
                 show_alert=True
             )
             return
@@ -168,8 +181,8 @@ async def confirm_purchase_callback(call: CallbackQuery):
         days = plan.duration_months * 30
         now = datetime.utcnow()
         name = f"user_{call.from_user.id}_{plan.id}_{location_code}_{int(time.time())}"
-
         traffic_gb = plan.duration_months * 100
+
         result = await generate_vless_link(server, name, days=days, traffic_gb=traffic_gb)
         if not result:
             user.balance += price
@@ -200,7 +213,6 @@ async def confirm_purchase_callback(call: CallbackQuery):
         ref = ref_result.scalar_one_or_none()
         if ref:
             earning = await add_referral_earning(session, ref.referrer_id, call.from_user.id, price)
-            # Уведомить реферера
             try:
                 await call.bot.send_message(
                     ref.referrer_id,
@@ -213,12 +225,12 @@ async def confirm_purchase_callback(call: CallbackQuery):
 
     await call.message.delete()
     await call.message.answer(
-        f"✅ <b>Purchase successful!</b>\n\n"
-        f"🌍 Location: {location_code.upper()}\n"
-        f"📅 Duration: {plan.duration_months} month{'s' if plan.duration_months > 1 else ''}\n"
-        f"💲 Paid: <code>{price}$</code>\n\n"
-        f"🔑 <b>Your VPN link:</b>\n<code>{link}</code>",
-        reply_markup=back_home_inline()
+        t("purchase_success", lang,
+          location=location_code.upper(),
+          date=(now + timedelta(days=days)).strftime("%d.%m.%Y"),
+          traffic=traffic_gb,
+          link=link),
+        reply_markup=back_home_inline(lang)
     )
     await call.answer()
 

@@ -384,3 +384,14 @@ async def toggle_promo(session: AsyncSession, promo_id: int):
     if promo:
         promo.is_active = not promo.is_active
         await session.commit()
+
+
+async def get_user_lang(session: AsyncSession, user_id: int) -> str:
+    user = await session.get(User, user_id)
+    return user.lang if user and user.lang else "en"
+
+async def set_user_lang(session: AsyncSession, user_id: int, lang: str):
+    user = await session.get(User, user_id)
+    if user:
+        user.lang = lang
+        await session.commit()

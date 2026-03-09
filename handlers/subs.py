@@ -6,15 +6,17 @@ from datetime import datetime
 from sqlalchemy import select
 
 from db.database import SessionFactory
+from db.crud import get_user_lang
 from db.models import Subscription
 from keyboards.inline import back_home_inline
+from locales import t
 
 router = Router()
 
 SUBS_PER_PAGE = 1
 
 
-def sub_detail_inline(sub_id: int, page: int, total: int) -> InlineKeyboardMarkup:
+def sub_detail_inline(sub_id: int, page: int, total: int, lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     nav = []
@@ -25,7 +27,7 @@ def sub_detail_inline(sub_id: int, page: int, total: int) -> InlineKeyboardMarku
         nav.append(InlineKeyboardButton(text=">", callback_data=f"my_subs:{page + 1}"))
 
     builder.row(*nav)
-    builder.row(InlineKeyboardButton(text="🏠 Home", callback_data="back_home"))
+    builder.row(InlineKeyboardButton(text=t("btn_back", lang), callback_data="back_home"))
     return builder.as_markup()
 
 
@@ -42,6 +44,7 @@ async def my_subs_page_callback(call: CallbackQuery):
 
 async def show_sub_page(call: CallbackQuery, page: int):
     async with SessionFactory() as session:
+        lang = await get_user_lang(session, call.from_user.id)
         result = await session.execute(
             select(Subscription)
             .where(Subscription.user_id == call.from_user.id)
@@ -52,8 +55,8 @@ async def show_sub_page(call: CallbackQuery, page: int):
     if not subs:
         await call.message.delete()
         await call.message.answer(
-            "📭 You have no subscriptions yet.",
-            reply_markup=back_home_inline()
+            t("no_subs", lang),
+            reply_markup=back_home_inline(lang)
         )
         await call.answer()
         return
@@ -68,13 +71,13 @@ async def show_sub_page(call: CallbackQuery, page: int):
 
     await call.message.delete()
     await call.message.answer(
-        f"📋 <b>Subscription {page + 1}/{total}</b>\n\n"
+        f"📋 <b>{t('subs_list', lang)} {page + 1}/{total}</b>\n\n"
         f"🌍 Location: <b>{sub.geo.upper()}</b>\n"
         f"Status: {status}\n"
         f"📅 Start: {sub.duration_start.strftime('%d.%m.%Y')}\n"
         f"📅 End: {sub.duration_end.strftime('%d.%m.%Y')}\n"
         f"⏳ Days left: {days_left}\n\n"
         f"🔑 <b>VPN Link:</b>\n<code>{sub.vless_link}</code>",
-        reply_markup=sub_detail_inline(sub.id, page, total)
+        reply_markup=sub_detail_inline(sub.id, page, total, lang)
     )
     await call.answer()

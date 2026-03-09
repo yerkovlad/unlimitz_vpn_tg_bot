@@ -154,7 +154,7 @@ async def search_user_callback(call: CallbackQuery, state: FSMContext):
     await call.message.delete()
     await call.message.answer(
         "🔍 Enter user ID or @username:",
-        reply_markup=back_home_inline()
+        reply_markup=back_home_inline("en")
     )
     await state.set_state(AdminState.search_user)
     await call.answer()
@@ -174,7 +174,7 @@ async def process_search(message: Message, state: FSMContext):
     await state.clear()
 
     if not user:
-        await message.answer("❌ User not found.", reply_markup=back_home_inline())
+        await message.answer("❌ User not found.", reply_markup=back_home_inline("en"))
         return
 
     username = f"@{user.username}" if user.username else "—"

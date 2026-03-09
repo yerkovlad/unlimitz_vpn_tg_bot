@@ -1,5 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from locales import t
 
 
 def about_inline() -> InlineKeyboardMarkup:
@@ -20,44 +21,45 @@ def confirm_inline(action: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def menu_inline() -> InlineKeyboardMarkup:
+def menu_inline(lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.add(
-        InlineKeyboardButton(text="🚀 Buy VPN", callback_data="buy_vpn"),
-        InlineKeyboardButton(text="👤 Profile", callback_data="profile"),
-        InlineKeyboardButton(text="🤑 Earn", callback_data="earn"),
-        InlineKeyboardButton(text="🛟 Support", url="https://t.me/unlimitz"),
-        InlineKeyboardButton(text="📖 About us", callback_data="about_us"),
-        InlineKeyboardButton(text="📢 Channel", url="https://t.me/unlimitzproject"),
-        InlineKeyboardButton(text="📄 Terms", callback_data="terms"),
-        InlineKeyboardButton(text="🌐 Our website", url="https://unlimitz.space/"),
-        InlineKeyboardButton(text="🎁 Promo", callback_data="promo"),
-        InlineKeyboardButton(text="ℹ️ Info", callback_data="info")
+        InlineKeyboardButton(text=t("btn_buy", lang), callback_data="buy_vpn"),
+        InlineKeyboardButton(text=t("btn_profile", lang), callback_data="profile"),
+        InlineKeyboardButton(text=t("btn_earn", lang), callback_data="earn"),
+        InlineKeyboardButton(text=t("btn_support", lang), url="https://t.me/unlimitz"),
+        InlineKeyboardButton(text=t("btn_about", lang), callback_data="about_us"),
+        InlineKeyboardButton(text=t("btn_channel", lang), url="https://t.me/unlimitzproject"),
+        InlineKeyboardButton(text=t("btn_terms", lang), callback_data="terms"),
+        InlineKeyboardButton(text=t("btn_website", lang), url="https://unlimitz.space/"),
+        InlineKeyboardButton(text=t("btn_promo", lang), callback_data="promo"),
+        InlineKeyboardButton(text=t("btn_info", lang), callback_data="info")
     )
     builder.adjust(1, 1, 2, 2, 1, 1, 1, 1)
     return builder.as_markup()
 
 
-def back_home_inline() -> InlineKeyboardMarkup:
+def back_home_inline(lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="🏠 Home", callback_data="back_home")
+        InlineKeyboardButton(text=t("btn_back", lang), callback_data="back_home")
     )
     return builder.as_markup()
 
-def profile_keyboard_inline(is_admin: bool = False) -> InlineKeyboardMarkup:
+def profile_keyboard_inline(is_admin: bool = False, lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.add(
-        InlineKeyboardButton(text="📋 My Subs", callback_data="my_subs"),
-        InlineKeyboardButton(text="💳 Top Up", callback_data="top_up"),
-        InlineKeyboardButton(text="🏠 Home", callback_data="back_home")
+        InlineKeyboardButton(text=t("btn_my_subs", lang), callback_data="my_subs"),
+        InlineKeyboardButton(text=t("btn_top_up", lang), callback_data="top_up"),
+        InlineKeyboardButton(text=t("btn_back", lang), callback_data="back_home")
     )
     if is_admin:
         builder.add(
-            InlineKeyboardButton(text="🔧 Admin Panel", callback_data="admin_panel")
+            InlineKeyboardButton(text=t("btn_admin", lang), callback_data="admin_panel")
         )
     builder.adjust(2, 1)
     return builder.as_markup()
+
 
 def admin_panel_inline() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
@@ -74,6 +76,7 @@ def admin_panel_inline() -> InlineKeyboardMarkup:
     )
     builder.adjust(2, 1, 1, 2, 1, 1, 1)
     return builder.as_markup()
+
 
 def user_manage_inline(user_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
