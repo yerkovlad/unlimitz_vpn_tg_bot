@@ -27,7 +27,6 @@ class User(Base):
     balance = Column(Float, default=0)
     ref_balance = Column(Float, default=0)
     ref_percent = Column(Float, nullable=True)
-    lang = Column(String, default="en")
 
     subscriptions = relationship("Subscription", back_populates="user")
 

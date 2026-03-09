@@ -8,11 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from db.database import SessionFactory
-from db.crud import activate_promo, get_available_server, increment_server_users, get_user_lang
+from db.crud import activate_promo, get_available_server, increment_server_users
 from db.models import Subscription, PromoCode
 from vless.api import generate_vless_link
 from keyboards.inline import back_home_inline
-from locales import t
 
 router = Router()
 
@@ -23,14 +22,12 @@ class PromoState(StatesGroup):
 
 @router.callback_query(F.data == "promo")
 async def promo_callback(call: CallbackQuery, state: FSMContext):
-    async with SessionFactory() as session:
-        lang = await get_user_lang(session, call.from_user.id)
-
     await call.message.delete()
     await call.message.answer(
-        t("promo_enter", lang),
+        "🎁 <b>Promo Code</b>\n\n"
+        "Enter your promo code:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=t("btn_back", lang), callback_data="back_home")]
+            [InlineKeyboardButton(text="🏠 Home", callback_data="back_home")]
         ])
     )
     await state.set_state(PromoState.waiting_code)
@@ -43,8 +40,6 @@ async def process_promo_code(message: Message, state: FSMContext):
     await state.clear()
 
     async with SessionFactory() as session:
-        lang = await get_user_lang(session, message.from_user.id)
-
         result = await session.execute(
             select(PromoCode)
             .where(PromoCode.code == code)
@@ -53,29 +48,29 @@ async def process_promo_code(message: Message, state: FSMContext):
         promo = result.scalar_one_or_none()
 
         if not promo:
-            await message.answer(t("promo_invalid", lang), reply_markup=back_home_inline(lang))
+            await message.answer("❌ <b>Invalid promo code.</b>", reply_markup=back_home_inline())
             return
 
         if not promo.is_active:
-            await message.answer(t("promo_inactive", lang), reply_markup=back_home_inline(lang))
+            await message.answer("❌ <b>This promo code is no longer active.</b>", reply_markup=back_home_inline())
             return
 
         if promo.expires_at and promo.expires_at < datetime.utcnow():
-            await message.answer(t("promo_expired", lang), reply_markup=back_home_inline(lang))
+            await message.answer("❌ <b>This promo code has expired.</b>", reply_markup=back_home_inline())
             return
 
         if promo.used_count >= promo.max_uses:
-            await message.answer(t("promo_limit", lang), reply_markup=back_home_inline(lang))
+            await message.answer("❌ <b>This promo code has reached its usage limit.</b>", reply_markup=back_home_inline())
             return
 
         server = await get_available_server(session, promo.location_code)
         if not server:
-            await message.answer(t("promo_no_server", lang), reply_markup=back_home_inline(lang))
+            await message.answer("❌ <b>No available servers for this location.</b>", reply_markup=back_home_inline())
             return
 
         activated = await activate_promo(session, promo, message.from_user.id)
         if not activated:
-            await message.answer(t("promo_used", lang), reply_markup=back_home_inline(lang))
+            await message.answer("❌ <b>You have already used this promo code.</b>", reply_markup=back_home_inline())
             return
 
         if promo.duration_days:
@@ -95,7 +90,7 @@ async def process_promo_code(message: Message, state: FSMContext):
 
         vless_result = await generate_vless_link(server, name, days=days, traffic_gb=traffic_gb)
         if not vless_result:
-            await message.answer(t("promo_failed", lang), reply_markup=back_home_inline(lang))
+            await message.answer("❌ <b>Failed to create VPN config. Please contact support.</b>", reply_markup=back_home_inline())
             return
 
         vless_link, client_uuid = vless_result
@@ -119,10 +114,10 @@ async def process_promo_code(message: Message, state: FSMContext):
         await session.commit()
 
     await message.answer(
-        t("promo_success", lang,
-          location=location_name,
-          duration=duration_label,
-          traffic=traffic_gb,
-          link=vless_link),
-        reply_markup=back_home_inline(lang)
+        f"✅ <b>Promo code activated!</b>\n\n"
+        f"🌍 Location: {location_name}\n"
+        f"⏳ Duration: {duration_label}\n"
+        f"📊 Traffic: {traffic_gb} GB\n\n"
+        f"🔗 <b>Your config:</b>\n<code>{vless_link}</code>",
+        reply_markup=back_home_inline()
     )
