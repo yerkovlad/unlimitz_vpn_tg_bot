@@ -122,4 +122,4 @@ To adapt the bot to your VPN service:
 
 ## License
 
-This project does not include a license file. Add a suitable license if you plan to publish or share it.
+This project does not include a license file.
